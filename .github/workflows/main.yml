@@ -16,6 +16,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -67,7 +68,7 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
 
       - name: Configure Android SDK and install SDK 36
@@ -90,7 +91,7 @@ jobs:
           "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle 8.13
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.13'
 
@@ -125,13 +126,14 @@ jobs:
           if [[ -f "scripts/verify_project.py" ]]; then
             python3 scripts/verify_project.py
           fi
-          gradle --no-daemon --no-configuration-cache testDebugUnitTest --console=plain
+          ./gradlew --no-daemon --no-configuration-cache testDebugUnitTest --console=plain
 
       - name: Build Debug & R8-Shrunk Signed Release APKs
         shell: bash
         run: |
           set -euo pipefail
-          gradle --no-daemon --no-configuration-cache assembleDebug assembleRelease --console=plain
+          chmod +x gradlew
+          ./gradlew --no-daemon --no-configuration-cache assembleDebug assembleRelease --console=plain
 
           RELEASE_APK="$(find app/build/outputs/apk/release -maxdepth 2 -type f -name '*.apk' ! -name '*-unsigned.apk' -print -quit)"
           if [[ -z "${RELEASE_APK}" ]]; then
