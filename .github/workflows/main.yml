@@ -65,6 +65,30 @@ jobs:
           echo "::error::No source project or ZIP found. Upload the RAM PLAYER source ZIP to the repository."
           exit 1
 
+      - name: Auto-patch missing disclaimer strings & verify resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          import pathlib
+
+          targets = [
+              pathlib.Path("app/src/main/res/values/strings.xml"),
+              pathlib.Path("app/src/main/res/values-hi/strings.xml")
+          ]
+          addition = (
+              '    <string name="logo_disclaimer_title">Logo &amp; Brand Disclaimer</string>\n'
+              '    <string name="logo_disclaimer_static">All channel logos, brand names, and trademarks displayed within the application are the property of their respective owners.</string>\n'
+          )
+          for p in targets:
+              if p.exists():
+                  txt = p.read_text(encoding="utf-8")
+                  if "logo_disclaimer_title" not in txt and "</resources>" in txt:
+                      txt = txt.replace("</resources>", addition + "</resources>")
+                      p.write_text(txt, encoding="utf-8")
+                      print(f"Patched missing strings in {p}")
+          EOF
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -91,7 +115,7 @@ jobs:
           "${SDKMANAGER}" --sdk_root="${SDK_ROOT}" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle 8.13
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
 
@@ -126,14 +150,23 @@ jobs:
           if [[ -f "scripts/verify_project.py" ]]; then
             python3 scripts/verify_project.py
           fi
-          ./gradlew --no-daemon --no-configuration-cache testDebugUnitTest --console=plain
+          GRADLE_CMD="gradle"
+          if [[ -f "./gradlew" && -f "gradle/wrapper/gradle-wrapper.jar" ]]; then
+            chmod +x ./gradlew
+            GRADLE_CMD="./gradlew"
+          fi
+          ${GRADLE_CMD} --no-daemon --no-configuration-cache testDebugUnitTest --console=plain
 
       - name: Build Debug & R8-Shrunk Signed Release APKs
         shell: bash
         run: |
           set -euo pipefail
-          chmod +x gradlew
-          ./gradlew --no-daemon --no-configuration-cache assembleDebug assembleRelease --console=plain
+          GRADLE_CMD="gradle"
+          if [[ -f "./gradlew" && -f "gradle/wrapper/gradle-wrapper.jar" ]]; then
+            chmod +x ./gradlew
+            GRADLE_CMD="./gradlew"
+          fi
+          ${GRADLE_CMD} --no-daemon --no-configuration-cache assembleDebug assembleRelease --console=plain
 
           RELEASE_APK="$(find app/build/outputs/apk/release -maxdepth 2 -type f -name '*.apk' ! -name '*-unsigned.apk' -print -quit)"
           if [[ -z "${RELEASE_APK}" ]]; then
@@ -168,4 +201,3 @@ jobs:
           path: single_release_out/RAM-PLAYER-v19.0-Debug.apk
           if-no-files-found: warn
           retention-days: 14
-          
